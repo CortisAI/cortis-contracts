@@ -14,10 +14,13 @@ The `$COR` token contract is **not in this repository and not in this audit scop
 
 | File | Lines | Priority |
 |---|---|---|
-| `contracts/CortisPassport.sol` | 160 | Critical |
 | `contracts/CortisEngagement.sol` | 203 | Critical |
 
-Out of scope: `scripts/`, `test/`, `flattened/`, and the frontend in `../app`. The frontend ABI in `../app/public/js/contracts.js` is provided only so auditors can confirm the interface matches the contracts.
+**Only `CortisEngagement.sol` is in audit scope.**
+
+`contracts/CortisPassport.sol` is included in the repository as a **dependency, out of scope**. `CortisEngagement` calls `passport.ownerOf(passportId)` through the minimal `ICortisPassport` interface for its attestation ownership check, so the passport source is provided for interface reference only. It does not require review under this engagement.
+
+Out of scope: `contracts/CortisPassport.sol`, `scripts/`, `test/`, `flattened/`, and the frontend in `../app`. The frontend ABI in `../app/public/js/contracts.js` is provided only so auditors can confirm the interface matches the contract.
 
 ---
 
@@ -46,23 +49,12 @@ Out of scope: `scripts/`, `test/`, `flattened/`, and the frontend in `../app`. T
 
 ## Key Security Properties to Verify
 
-### CortisPassport
-
-1. **Soulbound enforcement** — `_update` reverts when `from != address(0) && to != address(0)`. Verify no path allows a wallet-to-wallet transfer, including `safeTransferFrom` overloads, and that the OZ v5 `_update` override is the correct and complete interception point.
-2. **Approvals disabled** — `approve` and `setApprovalForAll` revert unconditionally as `pure` overrides. Confirm this does not break ERC-721 interface detection in a way that matters, and that no internal OZ path depends on them.
-3. **Per-owner count integrity** — `passportsOf` is incremented on mint and decremented on burn inside `_update`. Verify it cannot desynchronise from `balanceOf`, and that the decrement cannot underflow.
-4. **Burn authorisation** — `burnPassport` checks `ownerOf(tokenId) != msg.sender`. Verify only the holder can burn and that burning cleans `agentIdOf` and the token URI.
-5. **Token id monotonicity** — `_nextId` starts at 1 and only increments. Verify burned ids are never reissued and that `totalMinted()` correctly reports ever-minted rather than currently-held.
-6. **`_safeMint` receiver callback** — `mintPassport` calls `_safeMint`, which invokes `onERC721Received` on contract recipients. State is written before the callback. Assess whether a reentrant call into `mintPassport` from that hook can produce any inconsistent state, even though the obvious outcome is only an additional mint.
-7. **`tokenURI` is caller-supplied** — the minter, not the contract owner, sets the metadata URI at mint time, and it is stored verbatim with no validation. Confirm this cannot be used to break `tokenURI()` for other tokens, and flag any concern about arbitrary URI content.
-8. **`agentId` is unvalidated and non-unique** — arbitrary caller-supplied string, no uniqueness constraint, no length bound. Flag gas or griefing implications of very long strings.
-
-### CortisEngagement
+### CortisEngagement (the only contract under review)
 
 1. **24h check-in gate** — first call is always allowed (`last == 0`); afterwards `block.timestamp < last + CHECK_IN_INTERVAL` reverts with `CheckInTooSoon`. Verify the gate cannot be bypassed.
 2. **Streak correctness** — streak increments when `block.timestamp <= last + STREAK_RESET_GAP` (48h), otherwise resets to 1. Verify behaviour in the 24h-to-48h continuation window and at both exact boundaries, and that there is no cap on streak growth.
 3. **Attestation ownership guard** — `_requireAgentOwner` reverts `PassportNotSet` when `passport == address(0)` and `NotAgentOwner` when the caller does not own the passport. Verify neither attestation function can write state or emit before the guard runs.
-4. **External call surface** — the only external call is `passport.ownerOf(passportId)`, a view on a settable address. Assess what a malicious or misconfigured `passport` address could do: revert, consume gas, or return an attacker-chosen owner. Note that `setPassport` is owner-only and has no lock.
+4. **External call surface (the trust boundary to the out-of-scope passport)** — the only external call is `passport.ownerOf(passportId)`, a view on a settable address. Because the passport contract is out of scope, treat this as an untrusted boundary: assess what a malicious or misconfigured `passport` address could do — revert, consume unbounded gas, or return an attacker-chosen owner — and whether any of that harms `CortisEngagement` beyond a failed or falsely-permitted attestation. Note that `setPassport` is owner-only and has no lock.
 5. **Unbounded attestation** — `attestMap` and `attestWorkflow` have no rate limit and no per-day cap. A passport owner can call them repeatedly in one block and inflate `points` without bound. Confirm this affects only the points counter and creates no other risk. See "Intentional Design Decisions".
 6. **Points arithmetic** — `points`, `streak` and `totalCheckIns` are plain `uint256` with no decimals and no cap. Verify no realistic overflow path, including via `setPoints` with extreme values.
 7. **Owner config blast radius** — `setPoints` accepts arbitrary values with no bounds, and `setPassport` can be repointed at any time. Enumerate what an owner key compromise achieves. Note it cannot mint, burn, move a passport, or reduce an existing points balance.

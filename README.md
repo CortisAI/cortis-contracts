@@ -15,7 +15,7 @@ Cortis is a personal AI operator. Each owner runs a small roster of specialised 
 - **Libraries:** OpenZeppelin Contracts 5.x (`_update` hook model, not v4)
 - **Development:** Hardhat 2.22
 - **Frontend:** Vanilla JS + ethers.js v6 (in `../app`)
-- **Security:** under audit review by Hashlock — scope defined in `docs/AUDIT-SCOPE.md`
+- **Security:** `CortisEngagement` under security review by Hashlock — scope in `docs/AUDIT-SCOPE.md`
 
 ## Supported Networks
 
@@ -99,10 +99,8 @@ DEPLOY-CHECKLIST.md
 
 ## Audit
 
-Under review by [Hashlock](https://hashlock.com). Audit in progress.
+The engagement contract (`contracts/CortisEngagement.sol`) is under security review by [Hashlock](https://hashlock.com). Review in progress.
 
-| Document | Description |
-|---|---|
-| [Audit Scope](docs/AUDIT-SCOPE.md) | Audit targets, security properties to verify, intentional design decisions, and known limitations |
+Scope is deliberately narrow: **only `CortisEngagement` is under review.** `CortisPassport` is included as an out-of-scope dependency so the reviewers can read the `ownerOf` interface the engagement contract calls into. See [docs/AUDIT-SCOPE.md](docs/AUDIT-SCOPE.md) for the full target list, the security properties being checked, intentional design decisions, and known limitations.
 
-The $COR token contract is a separate BNB Smart Chain deployment and is **not** in this repository or in audit scope. Nothing under review holds, mints, transfers or prices a token.
+The $COR token is a separate BNB Smart Chain deployment at TGE. It is not in this repository and not in scope. Nothing under review holds, mints, transfers or prices a token.
