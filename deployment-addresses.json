@@ -1,0 +1,27 @@
+{
+  "note": "Pre-audit codebase. Contracts are built and tested but NOT deployed to any public network.",
+  "status": "pending",
+  "opBNB": {
+    "network": "opBNB Mainnet",
+    "chainId": 204,
+    "deployedAt": null,
+    "deployer": null,
+    "owner": null,
+    "contracts": {
+      "CortisPassport": "TBD — pending production deploy",
+      "CortisEngagement": "TBD — pending production deploy"
+    },
+    "verified": false,
+    "explorer": {
+      "base": "https://opbnb.bscscan.com"
+    }
+  },
+  "bsc": {
+    "network": "BNB Smart Chain",
+    "chainId": 56,
+    "status": "pending — $COR token contract is not in this repository and is not in audit scope",
+    "contracts": {
+      "CORToken": "TBD at TGE"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "cortis-contracts",
+  "version": "1.0.0",
+  "description": "Cortis on-chain engagement layer (opBNB) — soulbound passport + engagement contracts",
+  "license": "MIT",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:opbnb": "hardhat run scripts/deploy.js --network opbnb",
+    "deploy:local": "hardhat run scripts/deploy.js"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.10"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2",
+    "dotenv": "^16.4.5"
+  }
+}
