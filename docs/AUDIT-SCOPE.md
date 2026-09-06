@@ -20,7 +20,7 @@ The `$COR` token contract is **not in this repository and not in this audit scop
 
 `contracts/CortisPassport.sol` is included in the repository as a **dependency, out of scope**. `CortisEngagement` calls `passport.ownerOf(passportId)` through the minimal `ICortisPassport` interface for its attestation ownership check, so the passport source is provided for interface reference only. It does not require review under this engagement.
 
-Out of scope: `contracts/CortisPassport.sol`, `scripts/`, `test/`, `flattened/`, and the frontend in `../app`. The frontend ABI in `../app/public/js/contracts.js` is provided only so auditors can confirm the interface matches the contract.
+Out of scope: `contracts/CortisPassport.sol`, `test/`, and the frontend in `../app`. The frontend ABI in `../app/public/js/contracts.js` is provided only so auditors can confirm the interface matches the contract.
 
 ---
 
@@ -32,7 +32,7 @@ Out of scope: `contracts/CortisPassport.sol`, `scripts/`, `test/`, `flattened/`,
 - Target chain: opBNB Mainnet, chainId 204
 - 21 tests, all passing (`npm test`)
 
-`flattened/` holds single-file versions for explorer verification only. They inline all OpenZeppelin dependencies and are not for audit review; the Cortis logic is identical to `contracts/`.
+Deployment and opBNBScan verification (including flattened single-file sources) are handled from the private repository after the audited code is finalised. They are not part of this review.
 
 ---
 
@@ -87,7 +87,7 @@ Out of scope: `contracts/CortisPassport.sol`, `scripts/`, `test/`, `flattened/`,
 - **`block.timestamp` dependence.** Used for the 24h check-in gate and the 48h streak window. opBNB sequencer timestamps can move within bounds; the windows are wide enough that minor manipulation yields no meaningful advantage.
 - **No oracle, no price feed, no external protocol dependency.** All logic is self-contained apart from the `ownerOf` view on the passport contract.
 - **Attested hashes are opaque on-chain.** The contracts store `bytes32` hashes and emit them. They prove that a specific passport owner committed to a specific value at a specific time. They do **not** prove the underlying work was correct, useful, or actually performed by an AI agent. That guarantee lives off-chain in the signed action log.
-- **Ownership is a single key at deploy time.** The deploy script sets the deployer as owner. Transferring ownership to a multisig is a required post-deploy step, documented in `../DEPLOY-CHECKLIST.md`, not enforced in the contract. Note that `renounceOwnership` is **not** disabled; the inherited OpenZeppelin implementation is reachable. Flag this if you consider it a defect for this design.
+- **Ownership is a single key at deploy time.** The deployer is set as owner at construction. Transferring ownership to a multisig is a required post-deploy step handled from the private repository, not enforced in the contract. Note that `renounceOwnership` is **not** disabled; the inherited OpenZeppelin implementation is reachable. Flag this if you consider it a defect for this design.
 
 ---
 
@@ -120,7 +120,7 @@ Coverage: check-in first call, 24h revert, post-24h increment, 48h streak reset,
 
 ## Deployment Status
 
-Nothing is deployed. There is no mainnet or testnet address to compare against. `deployment-addresses.json` is a template with null values and will be filled after the audited code is deployed.
+Nothing is deployed. There is no mainnet or testnet address to compare against. Addresses will be recorded after the audited code is deployed from the private repository.
 
 ---
 

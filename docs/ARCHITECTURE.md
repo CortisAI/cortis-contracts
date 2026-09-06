@@ -192,7 +192,7 @@ Both contracts use OpenZeppelin `Ownable` with the owner set in the constructor.
 
 What the owner key **cannot** do: mint, burn or move a passport, reduce an existing points balance, withdraw anything, pause anything, or upgrade logic. There is no pause mechanism and no proxy by deliberate choice.
 
-What the owner key **can** do: set arbitrary point values for future actions, and repoint `setPassport` at another address, which would change which contract the ownership check reads from. `setPassport` has no lock. Ownership transfer to a multisig after deploy is a documented step in `../DEPLOY-CHECKLIST.md`, not enforced in code.
+What the owner key **can** do: set arbitrary point values for future actions, and repoint `setPassport` at another address, which would change which contract the ownership check reads from. `setPassport` has no lock. Ownership transfer to a multisig after deploy is handled from the private repository, not enforced in code.
 
 ---
 
@@ -224,6 +224,6 @@ The engagement contracts stay on opBNB permanently. The cross-chain entitlement 
 3. Call `engagement.setPassport(passportAddress)`.
 4. Transfer ownership of both contracts to the multisig.
 
-`scripts/deploy.js` performs steps 1 to 3 and writes the addresses to `deployments/<network>.json`. Step 4 is manual and documented in `../DEPLOY-CHECKLIST.md`.
+Deployment wires the passport into the engagement contract via `setPassport`, then ownership is transferred to a multisig. Both steps are handled from the private repository and are outside this review.
 
 Until step 3 runs, attestation reverts with `PassportNotSet` while check-in works normally.

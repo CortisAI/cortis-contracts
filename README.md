@@ -19,7 +19,7 @@ Cortis is a personal AI operator. Each owner runs a small roster of specialised 
 
 ## Supported Networks
 
-- opBNB Mainnet (Chain ID: 204) — `CortisPassport` + `CortisEngagement`, pending deploy
+- opBNB Mainnet (Chain ID: 204) — `CortisEngagement` (+ `CortisPassport` dependency), pending deploy
 - BNB Smart Chain (Chain ID: 56) — $COR token at TGE, contract not in this repository
 
 ## Contract Addresses
@@ -28,8 +28,6 @@ Cortis is a personal AI operator. Each owner runs a small roster of specialised 
 |---|---|---|---|
 | opBNB Mainnet (204) | TBD — pending deploy | TBD — pending deploy | — |
 | BNB Smart Chain (56) | — | — | TBD at TGE |
-
-See `deployment-addresses.json`.
 
 ## Contracts
 
@@ -53,39 +51,30 @@ See `deployment-addresses.json`.
 |---|---|
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Contract interactions, state machines, on-chain vs off-chain split, access control |
 | [AUDIT SCOPE](docs/AUDIT-SCOPE.md) | Audit targets, security properties, intentional design decisions, known limitations |
-| [TOKENOMICS](../CORTIS-TOKENOMICS.md) | $COR supply, allocation, depth-metered release |
-| [DEPLOY CHECKLIST](DEPLOY-CHECKLIST.md) | Step-by-step opBNB deployment and verification |
 
 ## Quick Start
 
 ```bash
 npm install
-npm test              # 21 passing
+npm test       # 21 passing
 npm run compile
-npm run deploy:local  # in-memory hardhat, free
-npm run deploy:opbnb  # opBNB mainnet, requires funded DEPLOYER_PRIVATE_KEY
 ```
 
-Copy `.env.example` to `.env` before deploying. `.env` is git-ignored.
+Copy `.env.example` to `.env` before compiling against a network. `.env` is git-ignored.
 
 ## Repository Structure
 
 ```
 contracts/
-  CortisPassport.sol        — soulbound ERC-721 agent identity
-  CortisEngagement.sol      — check-in + per-agent attestation
-flattened/                  — single-file versions for explorer verification
+  CortisEngagement.sol      — check-in + per-agent attestation (audit scope)
+  CortisPassport.sol        — soulbound ERC-721 identity (out-of-scope dependency)
 docs/
   ARCHITECTURE.md           — contract design and interactions
   AUDIT-SCOPE.md            — audit scope and security properties
 test/
-  CortisPassport.test.js
   CortisEngagement.test.js
-scripts/
-  deploy.js                 — deploys both, wires them, writes addresses
+  CortisPassport.test.js
 hardhat.config.js
-deployment-addresses.json
-DEPLOY-CHECKLIST.md
 .env.example
 ```
 
@@ -95,7 +84,7 @@ DEPLOY-CHECKLIST.md
 
 ## Verification
 
-`flattened/` contains single-file flattened sources for opBNBScan verification. They inline all OpenZeppelin dependencies, which is why they are longer; the Cortis logic is identical to `contracts/`. Both flattened files compile clean at 0.8.24 with the same optimizer settings.
+Contracts compile clean at Solidity 0.8.24 with the optimizer enabled (200 runs). Post-audit deployment and opBNBScan verification are handled from the private repository.
 
 ## Audit
 

@@ -5,9 +5,7 @@
   "license": "MIT",
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test",
-    "deploy:opbnb": "hardhat run scripts/deploy.js --network opbnb",
-    "deploy:local": "hardhat run scripts/deploy.js"
+    "test": "hardhat test"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
