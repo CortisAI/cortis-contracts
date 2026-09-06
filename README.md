@@ -15,7 +15,7 @@ Cortis is a personal AI operator. Each owner runs a small roster of specialised 
 - **Libraries:** OpenZeppelin Contracts 5.x (`_update` hook model, not v4)
 - **Development:** Hardhat 2.22
 - **Frontend:** Vanilla JS + ethers.js v6 (in `../app`)
-- **Security:** audit pending, scope defined in `docs/AUDIT-SCOPE.md`
+- **Security:** under audit review by Hashlock — scope defined in `docs/AUDIT-SCOPE.md`
 
 ## Supported Networks
 
@@ -99,4 +99,10 @@ DEPLOY-CHECKLIST.md
 
 ## Audit
 
-Audit pending. `docs/AUDIT-SCOPE.md` defines scope, the security properties to verify, intentional design decisions that may look unusual, and known limitations. The $COR token contract is a separate BNB Smart Chain deployment and is **not** in this repository or in scope.
+Under review by [Hashlock](https://hashlock.com). Audit in progress.
+
+| Document | Description |
+|---|---|
+| [Audit Scope](docs/AUDIT-SCOPE.md) | Audit targets, security properties to verify, intentional design decisions, and known limitations |
+
+The $COR token contract is a separate BNB Smart Chain deployment and is **not** in this repository or in audit scope. Nothing under review holds, mints, transfers or prices a token.
