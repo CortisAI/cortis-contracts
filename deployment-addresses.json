@@ -1,0 +1,48 @@
+{
+  "note": "Audited production deploy on opBNB mainnet. Deployed fresh from the audited proof-free source; admin (DEFAULT_ADMIN_ROLE) granted to the Gnosis Safe at construction. Deployer holds no roles.",
+  "status": "deployed",
+  "opBNB": {
+    "network": "opBNB Mainnet",
+    "chainId": 204,
+    "deployedAt": "2026-09-24T12:13Z",
+    "deployedAtBlock": 188540295,
+    "deployer": "0xD35e40A4D6Ef5bff89Ad47813c99fbB08Acc9Cbd",
+    "admin": "0x5272B0Ed2B790772EaF4F4c2E089A14DE70310f2",
+    "guardian": "0x386d8bAF34AEe9DdAc4BeD5B29D4474f4d9Bc6fa",
+    "issuer": "0x9b28f68A19dBd4AFfdFf236a1B8e88B5F381D56B",
+    "verified": true,
+    "verification": {
+      "provider": "sourcify",
+      "match": "exact_match",
+      "runtimeMatch": "exact_match",
+      "creationMatch": "exact_match",
+      "verifiedAt": "2026-09-24T12:53Z",
+      "note": "Sourcify exact bytecode match (runtime + creation) on chainId 204. opBNBScan/NodeReal Etherscan-style endpoint was unreachable (open-api.nodereal.io NXDOMAIN); Sourcify is the canonical decentralized verification and opBNBScan surfaces the Sourcify match.",
+      "lookup": {
+        "AgentPassport": "https://sourcify.dev/server/v2/contract/204/0x932E0E70763C7156c445c4f6F3f7926a4A3F4b4D",
+        "CortisEngagement": "https://sourcify.dev/server/v2/contract/204/0xF77C3f4c0b835B93d8d47D52F3a44f7Fe8d2269b"
+      }
+    },
+    "contracts": {
+      "AgentPassport": "0x932E0E70763C7156c445c4f6F3f7926a4A3F4b4D",
+      "CortisEngagement": "0xF77C3f4c0b835B93d8d47D52F3a44f7Fe8d2269b"
+    },
+    "txHashes": {
+      "AgentPassport": "0xd2087f10e5fc8286c0a37ba680b262613db66f4664ab9f1bd3f8b78dc044abea",
+      "CortisEngagement": "0x1993df582f91f807add3769a3a3dbbcfa633e2121d1c1b0f5b122272fb2b8691"
+    },
+    "explorer": {
+      "base": "https://opbnbscan.com",
+      "AgentPassport": "https://opbnbscan.com/address/0x932E0E70763C7156c445c4f6F3f7926a4A3F4b4D",
+      "CortisEngagement": "https://opbnbscan.com/address/0xF77C3f4c0b835B93d8d47D52F3a44f7Fe8d2269b"
+    }
+  },
+  "bsc": {
+    "network": "BNB Smart Chain",
+    "chainId": 56,
+    "status": "pending — $COR token contract is not in this repository and is not in audit scope",
+    "contracts": {
+      "CORToken": "TBD at TGE"
+    }
+  }
+}

@@ -2,128 +2,213 @@
 
 ## Context
 
-Cortis is a personal AI operator product. Each owner runs a small roster of specialised AI agents trained on their own private data. An agent's identity and its completed work are recorded on-chain.
+Cortis is a personal AI operator product. Each owner runs a small roster of
+specialised AI agents trained on their own private data. An agent's identity and
+its owner's engagement are recorded on-chain on opBNB.
 
-This repository contains the **Phase 1 contracts only**: the soulbound agent passport and the engagement/attestation layer. Both are **built and tested but not yet deployed to any public network**. There are no live addresses to review.
+This repository contains the **simplified proof-free smart-contract set**: the
+soulbound agent passport and the engagement/check-in core. This is the source
+deployed on opBNB Mainnet (chain 204). See `deployment-addresses.json`.
 
-The `$COR` token contract is **not in this repository and not in this audit scope**. It is a separate BNB Smart Chain deployment at TGE. Nothing in the contracts under review holds, mints, transfers or prices a token.
+The `$COR` token contract is **not in this repository and not in this audit
+scope**. It is a separate BNB Smart Chain deployment at TGE. Nothing in the
+contracts under review holds, mints, transfers or prices a token. Pre-TGE the
+contracts are gas-only.
+
+> **Model change (recorded).** An earlier revision used an attestor subsystem:
+> `AttestorRegistry`, attestor-signed `ActionCertificate`s, `correctActionOutcome`,
+> a boost economy with points-spending, and a fee-policy call path. That entire
+> subsystem was removed by product decision. On-chain points are now a public,
+> farmable engagement score and reward eligibility is decided off-chain. If a
+> signed audit report references `AttestorRegistry` or the attestor/boost/
+> correction paths, its scope predates this simplification and must be
+> reconciled against the current source before deploy.
 
 ---
 
 ## In Scope
 
-| File | Lines | Priority |
-|---|---|---|
-| `contracts/CortisEngagement.sol` | 203 | Critical |
+| File | Priority |
+|---|---|
+| `src/CortisEngagement.sol` | Critical |
+| `src/AgentPassport.sol` | Critical |
+| `src/interfaces/ICortis.sol` | Reference |
 
-**Only `CortisEngagement.sol` is in audit scope.**
+Retained but not deployed at launch: `src/policies/Policies.sol` (`NullFeePolicy`)
+— zero-fee policy kept for TGE wiring parity, not referenced by the engagement
+core.
 
-`contracts/CortisPassport.sol` is included in the repository as a **dependency, out of scope**. `CortisEngagement` calls `passport.ownerOf(passportId)` through the minimal `ICortisPassport` interface for its attestation ownership check, so the passport source is provided for interface reference only. It does not require review under this engagement.
-
-Out of scope: `contracts/CortisPassport.sol`, `test/`, and the frontend in `../app`. The frontend ABI in `../app/public/js/contracts.js` is provided only so auditors can confirm the interface matches the contract.
+Out of scope: `test/`, the off-chain API/indexer/frontend, and the frontend. The
+`$COR` token and any post-TGE fee/tier policy are out of scope.
 
 ---
 
 ## Toolchain
 
-- Solidity `0.8.24`, optimizer enabled, 200 runs
-- OpenZeppelin Contracts `^5.0.2` (note: v5, not v4 — `_update` hook, not `_beforeTokenTransfer`)
-- Hardhat `^2.22.10`
+- Solidity `0.8.28` (pragma `^0.8.27`), optimizer enabled, 400 runs, via-IR off
+- OpenZeppelin Contracts `5.6.1` (`AccessControl`, `Pausable`, `EIP712`, `ECDSA`, `ERC721`)
+- Foundry (`forge`) — `foundry.toml` pins solc, runs, remappings
 - Target chain: opBNB Mainnet, chainId 204
-- 21 tests, all passing (`npm test`)
+- 28 tests, all passing (`forge test`)
 
-Deployment and opBNBScan verification (including flattened single-file sources) are handled from the private repository after the audited code is finalised. They are not part of this review.
+---
+
+## Prior Security Review & Hashlock Fixes
+
+An independent source-level review preceded the Hashlock audit. The Hashlock
+engagement produced findings **M-01, L-01..L-06, Q-01..Q-03** and **L-02
+(reject active keys in `markCompromised()`)**; all fixes are applied in this
+source. Note that some of those findings were raised against the attestor
+revision; the proof-free simplification removed the code paths several of them
+touched. Auditors should confirm the fixes hold on the current source and look
+for regressions.
+
+Key surviving properties to confirm on the proof-free core:
+
+- Telemetry (map/workflow/deploy) awards **zero points**.
+- `points` is a single cumulative value with **no spend/decrement/correction
+  path**, so it cannot be inflated or double-credited.
+- Wallet check-in award follows the capped quadratic curve and cannot exceed
+  `CHECKIN_MAX_AWARD`.
 
 ---
 
 ## Design Intent (read before reviewing)
 
-1. **Pre-TGE the contracts are gas-only.** No token, no fee, no stake, no payable function. The only cost to a user is opBNB gas.
-2. **Sybil resistance pre-TGE is gas cost plus bound identity only.** There is no on-chain identity oracle. This is a known and accepted limitation, not an oversight.
-3. **Passports are soulbound.** Transfers are blocked. Mint and burn are the only state transitions.
-4. **Attestation is per-agent, not per-account.** `attestMap` and `attestWorkflow` require the caller to own the referenced passport. This is what makes reputation attach to a specific agent rather than a wallet.
-5. **`setCorToken` is a reserved hook.** It stores an address and nothing else. It exists so post-TGE fee and stake modules can attach without redeploying the engagement contract. Confirm it has no reachable effect on any code path today.
-6. **One wallet may hold many passports.** This is intentional: one passport per agent, several agents per owner.
+1. **Pre-TGE the contracts are gas-only.** No token, no fee, no stake, no
+   payable function is reachable. `NullFeePolicy` is not wired into the core.
+2. **On-chain points are a public engagement score, not a scarce asset.** There
+   is one monotonic `points` value per wallet and per agent, no spend path, and
+   no cross-account transfer. Reward eligibility is decided off-chain.
+3. **Wallet check-in is permissionless.** `checkIn()` takes no passport and no
+   role; it is the top-of-funnel DAU action. `checkIn(agentId)` requires an
+   active passport owned by the caller.
+4. **Passports are soulbound (ERC-5192).** Transfers and approvals revert. Mint
+   and deactivate are the state transitions. Roster capped at 5 active per owner.
+5. **Immutable, no proxy.** Both contracts are immutable. A fix is a fresh
+   deploy plus an audited state import, never an in-place upgrade.
+6. **Governance is role-based and minimal.** `DEFAULT_ADMIN_ROLE` (Gnosis Safe
+   multisig) can only `unpause()`; a separate `GUARDIAN_ROLE` can `pause()` but
+   not unpause. There is no attestor to add and no fee policy to swap pre-TGE.
+
+---
+
+## Check-in curve (growth ledger)
+
+- Award per wallet check-in = `CHECKIN_LIN_COEFF (23) * streak + CHECKIN_QUAD_COEFF (2) * streak^2`, capped at `CHECKIN_MAX_AWARD (10,000)`.
+- Streak increments on consecutive UTC days; a gap over one day resets to 1.
+- Views: `walletStateOf(address)`, `walletCheckedInToday(address)`, `walletNextCheckInAward(address) -> (uint64 award, uint16 streakAfter)`.
+- Per-agent check-in is a flat +1 with independent streak tracking, one per UTC day.
+- Integer truncation is intentional; the `uint64(award)` cast is safe because the award is capped at 10,000.
 
 ---
 
 ## Key Security Properties to Verify
 
-### CortisEngagement (the only contract under review)
+### CortisEngagement
 
-1. **24h check-in gate** — first call is always allowed (`last == 0`); afterwards `block.timestamp < last + CHECK_IN_INTERVAL` reverts with `CheckInTooSoon`. Verify the gate cannot be bypassed.
-2. **Streak correctness** — streak increments when `block.timestamp <= last + STREAK_RESET_GAP` (48h), otherwise resets to 1. Verify behaviour in the 24h-to-48h continuation window and at both exact boundaries, and that there is no cap on streak growth.
-3. **Attestation ownership guard** — `_requireAgentOwner` reverts `PassportNotSet` when `passport == address(0)` and `NotAgentOwner` when the caller does not own the passport. Verify neither attestation function can write state or emit before the guard runs.
-4. **External call surface (the trust boundary to the out-of-scope passport)** — the only external call is `passport.ownerOf(passportId)`, a view on a settable address. Because the passport contract is out of scope, treat this as an untrusted boundary: assess what a malicious or misconfigured `passport` address could do — revert, consume unbounded gas, or return an attacker-chosen owner — and whether any of that harms `CortisEngagement` beyond a failed or falsely-permitted attestation. Note that `setPassport` is owner-only and has no lock.
-5. **Unbounded attestation** — `attestMap` and `attestWorkflow` have no rate limit and no per-day cap. A passport owner can call them repeatedly in one block and inflate `points` without bound. Confirm this affects only the points counter and creates no other risk. See "Intentional Design Decisions".
-6. **Points arithmetic** — `points`, `streak` and `totalCheckIns` are plain `uint256` with no decimals and no cap. Verify no realistic overflow path, including via `setPoints` with extreme values.
-7. **Owner config blast radius** — `setPoints` accepts arbitrary values with no bounds, and `setPassport` can be repointed at any time. Enumerate what an owner key compromise achieves. Note it cannot mint, burn, move a passport, or reduce an existing points balance.
-8. **`corToken` is inert** — verify `corToken` is written by `setCorToken` and read nowhere, and that no branch in the contract depends on it.
-9. **No value handling** — no function is `payable`, and there is no `receive` or `fallback`. Confirm the contract cannot custody or be drained of BNB, and consider whether the absence of an explicit reverting `receive()` matters for this deployment.
+1. **Points can only come from check-in.** Confirm map/workflow/deploy paths
+   (both wallet and agent overloads) credit zero points. Only `checkIn()`
+   (wallet curve) and `checkIn(agentId)` (agent +1) credit.
+2. **Curve safety.** `_checkInAward` cannot exceed `CHECKIN_MAX_AWARD`; the
+   `uint64` cast cannot truncate a larger value; streak arithmetic saturates at
+   `type(uint16).max` and never overflows.
+3. **One check-in per day.** A wallet and an agent can each check in at most once
+   per UTC day; consecutive-day detection and gap-reset behave as documented.
+4. **Passport binding.** `checkIn(agentId)` and the agent activity overloads
+   require an active passport owned by `msg.sender`; reject zero/out-of-range
+   agentIds (`uint240` bound) and non-owners.
+5. **Pause semantics.** Guardian can pause but not unpause; `whenNotPaused`
+   gates the mutating functions; paused state cannot strand funds (there are
+   none).
+6. **No value handling.** No `payable`, `receive`, or `fallback`. Confirm the
+   contract cannot custody or be drained of BNB.
+7. **No admin over-reach.** Enumerate what an admin-key compromise achieves;
+   confirm it cannot mint/move/burn a passport, cannot rewrite history, and
+   cannot reduce a points balance. The only admin power is `unpause()`.
+
+### AgentPassport (ERC-721 soulbound, ERC-5192)
+
+1. **Soulbound enforcement** at the OZ v5 `_update` chokepoint; every transfer
+   overload and `approve`/`setApprovalForAll` reverts. `locked(id)` returns true.
+2. **Voucher mint** — EIP-712 `MINT_VOUCHER_TYPEHASH` signed by the issuer;
+   per-owner voucher nonce consumed once; deadline enforced; voucher bound to
+   the recipient.
+3. **Roster cap** — max 5 active passports per owner; `deactivate` frees a slot
+   without erasing ownership/history; `respecialize` updates the bound identity.
+4. **Access control** — issuer, guardian and admin roles are separated; confirm
+   role assignment in the constructor and that pausing blocks minting.
 
 ---
 
 ## Intentional Design Decisions (Not Bugs)
 
-**No pause mechanism.** Neither contract is pausable. The contracts hold no funds and no token, and the worst outcome of abuse is inflated point counters in an off-chain-scored system. We judged the centralisation cost of a pause switch higher than the benefit at this phase. Flag it if you disagree, with reasoning.
-
-**Permissionless minting with no supply cap.** Anyone can call `mintPassport` and mint unlimited passports for the cost of gas. Agent identity is meant to be free to create; scarcity lives in the private data and accumulated attestation history, not in the mint. Sybil filtering at any future snapshot is off-chain.
-
-**Unlimited attestations per day.** Attestation frequency is deliberately uncapped because a productive agent may complete many pieces of work in a day. Raw `points` is therefore not a scarce or trustworthy standalone metric, and downstream scoring is expected to weight attestation content off-chain rather than count events. We would still like this called out explicitly if you see a consequence we have not.
-
-**Points are not 18-decimal.** `points` is a plain integer counter, not ERC-20-style precision. It is an engagement signal, never a balance, and there is no path from points to a transferable asset in these contracts.
-
-**Burn is allowed.** A holder may burn their own passport. Soulbound means non-transferable, not non-destructible. Burning is the exit path for a bound identity, and it deliberately does not refund, reverse or preserve anything.
-
-**`totalMinted()` counts burned tokens.** It reports ever-minted, derived from `_nextId - 1`, and does not decrease on burn. Ids are never reused.
-
-**`setCorToken` exists before the token does.** It is dead storage today by design, so that TGE does not require redeploying the engagement contract or migrating the points ledger.
+- **Telemetry (map/workflow/deploy) awards zero points.** Kept for on-chain
+  activity signal only.
+- **Wallet check-in is Sybil-farmable by design at the activity layer.** The
+  streak curve is a retention rule, not proof of a unique human. Reward
+  eligibility is gated off-chain at snapshot; raw check-in count is an activity
+  metric, not an allocation.
+- **Permissionless wallet check-in; no supply cap on passports beyond the
+  per-owner roster of 5.** Agent identity is meant to be cheap to create.
+- **Immutable, no proxy, no delegatecall.** A defect is fixed by fresh deploy +
+  audited state import.
 
 ---
 
 ## Known Limitations
 
-- **No on-chain identity.** The contracts cannot distinguish one human with ten wallets from ten humans. Pre-TGE sybil resistance is gas cost plus the requirement to own a passport before attesting. Any snapshot-time filtering is off-chain cluster analysis.
-- **`block.timestamp` dependence.** Used for the 24h check-in gate and the 48h streak window. opBNB sequencer timestamps can move within bounds; the windows are wide enough that minor manipulation yields no meaningful advantage.
-- **No oracle, no price feed, no external protocol dependency.** All logic is self-contained apart from the `ownerOf` view on the passport contract.
-- **Attested hashes are opaque on-chain.** The contracts store `bytes32` hashes and emit them. They prove that a specific passport owner committed to a specific value at a specific time. They do **not** prove the underlying work was correct, useful, or actually performed by an AI agent. That guarantee lives off-chain in the signed action log.
-- **Ownership is a single key at deploy time.** The deployer is set as owner at construction. Transferring ownership to a multisig is a required post-deploy step handled from the private repository, not enforced in the contract. Note that `renounceOwnership` is **not** disabled; the inherited OpenZeppelin implementation is reachable. Flag this if you consider it a defect for this design.
+- **No on-chain identity oracle.** The contracts cannot distinguish one human
+  with ten wallets from ten humans. Snapshot-time Sybil filtering is off-chain.
+- **`block.timestamp` / UTC-day dependence** for check-in and streaks. opBNB
+  sequencer timestamps move within bounds; windows are wide enough that minor
+  manipulation yields no meaningful advantage.
+- **Points are an engagement signal, not proof of work.** With the attestor
+  subsystem removed, on-chain points make no claim about unique humans or real
+  work; all such weighting is off-chain.
 
 ---
 
 ## Listing Considerations
 
-If any pattern here would cause a review team at Binance DappBay, opBNB ecosystem, or a CEX listing desk to flag or reject a submission, please note it explicitly even where it is not a traditional vulnerability. Specific things we want checked:
-
 - No admin path that can drain user funds. The contracts never hold funds.
-- No hidden mint or inflation mechanism in any token sense.
-- No blacklist, no transfer tax, no owner-controlled transfer restriction beyond the blanket soulbound rule.
-- No proxy, no upgradeability, no delegatecall. Both contracts are immutable once deployed.
-- Contracts must verify cleanly on opBNBScan. Flattened sources are provided for that.
+- No hidden mint or inflation in any token sense (points are not a transferable
+  asset).
+- No blacklist, no transfer tax, no owner-controlled transfer restriction beyond
+  the blanket soulbound rule.
+- No proxy, no upgradeability, no delegatecall. All contracts are immutable.
+- Contracts must verify cleanly on opBNBScan.
 
 ---
 
 ## Test Suite
 
-21 tests. Run with:
+28 tests. Run with Foundry:
 
 ```bash
-npm install
-npm test
+forge install
+forge test
 ```
 
-Expected: `21 passing`.
-
-Coverage: check-in first call, 24h revert, post-24h increment, 48h streak reset, per-wallet isolation, `timeUntilNextCheckIn` boundaries, both attestation happy paths, both attestation non-owner reverts, unset-passport revert, `setPoints` access control, `setCorToken` storage, `setPassport` access control, passport mint and event, multiple passports per wallet with incrementing ids, `transferFrom` revert, `safeTransferFrom` revert, `approve` and `setApprovalForAll` reverts, owner burn with count decrement, non-owner burn revert.
+Expected: `28 passed`. Coverage spans soulbound/roster/voucher paths, wallet and
+agent check-in and streak boundaries, the accelerating curve and its cap,
+zero-point telemetry, and pause/guardian rules.
 
 ---
 
 ## Deployment Status
 
-Nothing is deployed. There is no mainnet or testnet address to compare against. Addresses will be recorded after the audited code is deployed from the private repository.
+Deployed on opBNB Mainnet (chain 204) on 2026-09-24 from this source, and
+source-verified on Sourcify (exact match):
+
+- `CortisEngagement`: `0xF77C3f4c0b835B93d8d47D52F3a44f7Fe8d2269b`
+- `AgentPassport`: `0x932E0E70763C7156c445c4f6F3f7926a4A3F4b4D`
+
+Full details in `deployment-addresses.json`.
 
 ---
 
 ## Questions
 
-Any question about a design decision above, or about intent where the code is ambiguous, should be raised rather than assumed. We would rather answer a question than receive a finding based on a guess.
+Any question about a design decision or intent should be raised rather than
+assumed.

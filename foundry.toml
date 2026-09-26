@@ -1,0 +1,31 @@
+[profile.default]
+src = "src"
+out = "out"
+test = "test"
+libs = ["node_modules", "lib"]
+solc = "0.8.28"
+optimizer = true
+optimizer_runs = 400
+via_ir = false
+remappings = [
+  "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+  "forge-std/=lib/forge-std/src/",
+]
+
+[fuzz]
+runs = 1024
+
+[invariant]
+runs = 256
+depth = 64
+fail_on_revert = false
+
+[profile.ci]
+fuzz = { runs = 10000 }
+verbosity = 3
+
+# BNB Chain networks. opBNB Mainnet (chain 204) is the production deployment.
+[rpc_endpoints]
+opbnb = "https://opbnb-mainnet-rpc.bnbchain.org"
+opbnb_testnet = "https://opbnb-testnet-rpc.bnbchain.org"
+bsc = "https://bsc-dataseed.bnbchain.org"
