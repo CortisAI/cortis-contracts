@@ -1,9 +1,11 @@
 node_modules
+lib
 .env
+out
 cache
+broadcast
 artifacts
-typechain-types
 coverage
-coverage.json
+lcov.info
 deployments/hardhat.json
 deployments/localhost.json

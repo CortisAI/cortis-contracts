@@ -3,163 +3,136 @@
 ## Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                          OWNER                              │
-│              (one wallet, several agents)                   │
-└───────────┬─────────────────────────────────────────────────┘
-            │
-            │ mintPassport()          checkIn()
-            │                        attestMap()
-            │                        attestWorkflow()
-            │                                │
-   ┌────────▼──────────┐         ┌───────────▼──────────────┐
-   │  CortisPassport   │◄────────│   CortisEngagement       │
-   │                   │ ownerOf │                          │
-   │ - mintPassport()  │         │ - checkIn()              │
-   │ - burnPassport()  │         │ - attestMap()            │
-   │ - totalMinted()   │         │ - attestWorkflow()       │
-   │ - tokenURI()      │         │ - timeUntilNextCheckIn() │
-   │                   │         │                          │
-   │ agentIdOf[]       │         │ points[]                 │
-   │ passportsOf[]     │         │ streak[]                 │
-   │                   │         │ lastCheckIn[]            │
-   │ ERC-721 soulbound │         │ totalCheckIns[]          │
-   │ transfers revert  │         │ corToken (reserved)      │
-   └───────────────────┘         └──────────────────────────┘
-            │                                │
-            └────────────┬───────────────────┘
-                         │
-            ┌────────────▼─────────────────────────────┐
-            │       opBNB Mainnet (chainId 204)        │
-            │   All events indexed and public          │
+                         ┌───────────────────────────────┐
+                         │            OWNER              │
+                         │  (one wallet, up to 5 agents) │
+                         └──────┬────────────────┬───────┘
+             mint voucher       │                │  checkIn()            (wallet)
+             (issuer-signed)    │                │  checkIn(agentId)     (agent)
+                                ▼                ▼  mapMe / generateWorkflow / deployAgent
+                    ┌────────────────┐   ┌─────────────────────────────┐
+                    │  AgentPassport │◄──│      CortisEngagement       │
+                    │  ERC-721/5192  │   │  (immutable engagement core)│
+                    │  soulbound     │   │                             │
+                    │  roster max 5  │   │  wallet checkIn → curve pts │
+                    └────────────────┘   │  agent  checkIn → +1        │
+                                         │  map/workflow/deploy → 0    │
+                                         │  pause / unpause            │
+                                         └──────────────┬──────────────┘
+                                                        │ reads ownership/active
+                                                        ▼
+                                              (AgentPassport only)
+
+            ┌──────────────────────────────────────────┐
+            │        opBNB Mainnet (chainId 204)        │
+            │      All events indexed and public        │
             └──────────────────────────────────────────┘
 
             ┌──────────────────────────────────────────┐
-            │  BNB Smart Chain (chainId 56)            │
-            │  $COR token — NOT in this repository,    │
-            │  deployed separately at TGE              │
+            │  BNB Smart Chain (chainId 56)             │
+            │  $COR token — NOT in this repository,     │
+            │  deployed separately at TGE               │
             └──────────────────────────────────────────┘
 ```
 
-Two contracts. One directional dependency. No proxy, no upgradeability, no delegatecall, no external protocol.
+Two deployed contracts. No proxy, no upgradeability, no delegatecall. The
+engagement core's only on-chain dependency is the immutable `AgentPassport`.
+
+> **Proof-free model.** The earlier attestor subsystem (AttestorRegistry,
+> attestor-signed action certificates, corrections, boost, points-spending, the
+> fee-policy call path) was removed by product decision. On-chain points are a
+> public, farmable engagement score; reward eligibility is decided off-chain.
+> `NullFeePolicy` remains in the repo for TGE wiring parity but is not wired into
+> the core and is not deployed at launch.
 
 ---
 
 ## Contract Relationships
 
-### CortisEngagement → CortisPassport
+### CortisEngagement → AgentPassport
 
-`CortisEngagement` holds a settable `ICortisPassport` reference and calls exactly one function on it:
+The engagement core holds an immutable `IAgentPassport` reference. It reads
+ownership/active state to bind a per-agent check-in to an agent the caller
+actually owns. The passport reference is set once in the constructor and is not
+repointable. This is the core's only external contract call.
 
-```solidity
-interface ICortisPassport {
-    function ownerOf(uint256 tokenId) external view returns (address);
-}
-```
-
-That single `view` call is the entire coupling. It runs inside `_requireAgentOwner`, which both attestation functions call before touching state:
-
-```solidity
-function _requireAgentOwner(uint256 passportId) internal view {
-    if (address(passport) == address(0)) revert PassportNotSet();
-    if (passport.ownerOf(passportId) != msg.sender) revert NotAgentOwner();
-}
-```
-
-Consequences worth stating plainly:
-
-- `checkIn()` does **not** require a passport. A wallet can check in from day one with no agent. Check-in is the wide-funnel action.
-- Attestation **does** require passport ownership. That is what binds a piece of attested work to a specific agent rather than to a wallet.
-- If `passport` is never set, attestation is unreachable and check-in still works. The contracts are independently deployable and the wiring is a post-deploy step.
-
-`CortisPassport` has no reference to `CortisEngagement`. It does not know engagement exists. Passports remain valid and mintable if engagement is never deployed.
+The wallet-scoped `checkIn()` needs no passport at all: it is permissionless and
+open to any caller, which is the top-of-funnel DAU action.
 
 ---
 
-## CortisPassport
+## Points
 
-Soulbound ERC-721 on OpenZeppelin v5.
+There is a single cumulative `points` value per wallet and per agent. It only
+increases; there is **no spend, decrement, or correction path**, so `points`
+and any notion of "lifetime points" can never diverge. (The old proof economy's
+`lifetimePoints` and the unused `ENGAGEMENT_POINTS` constant were removed.)
 
-**Identity model.** One passport represents one agent. Minting is the act of committing an agent on-chain. A wallet may hold many passports, one per agent. `agentIdOf[tokenId]` stores a caller-supplied off-chain identifier such as `COR-AB12CD`.
-
-**Soulbound enforcement.** OpenZeppelin v5 routes every mint, burn and transfer through `_update`. Cortis overrides it:
-
-```solidity
-function _update(address to, uint256 tokenId, address auth)
-    internal override returns (address)
-{
-    address from = _ownerOf(tokenId);
-    if (from != address(0) && to != address(0)) revert SoulboundNonTransferable();
-    address previousOwner = super._update(to, tokenId, auth);
-    if (from == address(0)) passportsOf[to] += 1;        // mint
-    else if (to == address(0)) passportsOf[from] -= 1;   // burn
-    return previousOwner;
-}
-```
-
-Mint has `from == address(0)`. Burn has `to == address(0)`. Anything else has both non-zero and reverts. Because `_update` is the single chokepoint in v5, every transfer overload is covered by one guard. `approve` and `setApprovalForAll` are additionally overridden to revert as `pure` functions, since their only purpose is enabling transfers.
-
-**State transitions.** Only two:
-
-```
-        mintPassport()                    burnPassport()
-  ∅ ──────────────────────► HELD ──────────────────────► BURNED
-                              │
-                              │ transferFrom / safeTransferFrom
-                              └──────────► revert SoulboundNonTransferable
-```
-
-Burn is holder-only and clears `agentIdOf` and the stored URI. Ids come from `_nextId`, which starts at 1 and only increments, so burned ids are never reissued. `totalMinted()` returns `_nextId - 1`, meaning ever-minted, and does not decrease on burn.
-
----
-
-## CortisEngagement
-
-Gas-only engagement ledger. No `payable` function, no `receive`, no `fallback`. The contract cannot custody value.
-
-### Check-in state machine
-
-```
-CHECK_IN_INTERVAL = 24 hours
-STREAK_RESET_GAP  = 48 hours
-
-first call (lastCheckIn == 0)
-  └─► always allowed, streak = 1
-
-subsequent call at time t, previous at time L
-  ├─ t <  L + 24h  ─► revert CheckInTooSoon(L + 24h)
-  ├─ t <= L + 48h  ─► streak += 1        (continuation window)
-  └─ t >  L + 48h  ─► streak  = 1        (reset)
-```
-
-The valid continuation window is therefore 24h to 48h after the previous check-in. Miss it and the streak restarts. Streak has no cap.
-
-Points on check-in:
-
-```
-gained = checkInPoints + (streak * streakBonus)
-```
-
-Defaults are `checkInPoints = 10` and `streakBonus = 2`, both owner-settable via `setPoints`. Because the bonus multiplies the current streak, a maintained streak compounds. Nothing decays and nothing is ever subtracted.
-
-### Attestation
-
-Two functions, identical shape, different semantic:
-
-| Function | Argument | Meaning |
+| Action | Scope | Award |
 |---|---|---|
-| `attestMap(passportId, mapHash)` | `keccak256` of the generated map JSON | the agent's context/knowledge map at a point in time |
-| `attestWorkflow(passportId, workflowHash)` | `keccak256` of the workflow definition | a completed piece of agent work |
+| `checkIn()` | per wallet | `23*streak + 2*streak^2`, capped at 10,000 |
+| `checkIn(agentId)` | per agent | flat +1 |
+| `mapMe` / `generateWorkflow` / `deployAgent` | wallet or agent | 0 (activity signal only) |
 
-Both require passport ownership, add flat points, and emit the hash with a timestamp. Neither is rate-limited: a productive agent may attest many times a day, so raw `points` is an engagement signal rather than a scarce metric. Downstream scoring weights attestation content off-chain.
+### Wallet check-in curve
 
-Only hashes reach the chain. No prompts, no outputs, no PII, no embeddings. An observer sees that a specific passport owner committed to a specific 32-byte value at a specific time, and nothing about what the value contains.
+```
+award = CHECKIN_LIN_COEFF * streak + CHECKIN_QUAD_COEFF * streak^2   (capped)
+CHECKIN_LIN_COEFF = 23
+CHECKIN_QUAD_COEFF = 2
+CHECKIN_MAX_AWARD = 10_000     # reached ~day 66
 
-### What an attestation proves, and does not
+  day 1  -> 25        day 21 -> 1,365     day 60 -> 8,580
+  day 7  -> 259       day 30 -> 2,490     day 66 -> 10,000 (cap)
+  day 14 -> 714       day 45 -> 5,085
+```
 
-Proves: a wallet that owned passport `N` at block time `T` committed to hash `H`, publicly and immutably.
+A consecutive UTC day increments the streak; any gap of more than one day resets
+it to 1. Integer arithmetic throughout; the `uint64` cast of the award is safe
+because the award is capped at 10,000.
 
-Does not prove: that the underlying work was correct, useful, or produced by an AI agent at all. The contract has no view into the content. That guarantee lives in the off-chain signed action log whose hash is what gets attested.
+### Agent check-in
+
+`checkIn(agentId)` requires an active passport owned by the caller, is limited
+to one call per agent per UTC day, tracks a streak, and awards a flat +1.
+
+### Activity events
+
+`mapMe`, `generateWorkflow`, and `deployAgent` (both wallet-scoped and
+agent-scoped overloads) record activity counts and emit events but award zero
+points. They exist for on-chain activity signal only.
+
+---
+
+## AgentPassport
+
+Soulbound ERC-721 (ERC-5192) on OpenZeppelin v5.
+
+- **Identity model** — one passport per agent, up to 5 active per owner.
+- **Mint** — voucher-based: the issuer signs an EIP-712 `MintVoucher` bound to
+  the recipient, template, spec, per-owner nonce and deadline. The recipient
+  submits it. Nonce is consumed once; deadline enforced; digest bound to the
+  recipient so a leaked voucher is useless to anyone else.
+- **Soulbound enforcement** — every mint/transfer/deactivate routes through the
+  OZ v5 `_update` chokepoint; wallet-to-wallet transfer reverts. `approve` and
+  `setApprovalForAll` revert. `locked(id)` returns true (ERC-5192).
+- **Roster** — `activeCountOf(owner)` capped at 5; `deactivate` frees a slot but
+  preserves ownership/history. `respecialize` updates the bound identity.
+
+---
+
+## Access Control
+
+| Role | Holder (intended) | Powers |
+|---|---|---|
+| `DEFAULT_ADMIN_ROLE` | Gnosis Safe multisig | `unpause()` (the only launch power) |
+| `GUARDIAN_ROLE` | separate guardian | `pause()` only (cannot unpause) |
+| issuer | signing service | sign mint vouchers (off-chain) |
+
+What no key can do: mint/move/burn a passport out of the soulbound rules,
+reduce an existing points balance, withdraw value (there is none), or upgrade
+logic (no proxy). There is no attestor to add and no fee policy to swap
+pre-TGE, so the admin has no routine on-chain job at launch.
 
 ---
 
@@ -167,63 +140,17 @@ Does not prove: that the underlying work was correct, useful, or produced by an 
 
 | Data | Location | Reason |
 |---|---|---|
-| Agent identity, ownership | on-chain | must be publicly verifiable and non-transferable |
+| Agent identity, ownership, active state | on-chain | publicly verifiable, non-transferable |
 | Check-in timestamps, streak, points | on-chain | the engagement record is the point |
-| Map and workflow hashes | on-chain | immutable commitment with a timestamp |
-| Agent prompts, outputs, action logs | off-chain | private to the owner; only the hash is published |
-| Owner private data, embeddings, knowledge graph | off-chain | never leaves owner control; this is the product moat |
-| Reputation score | off-chain, derived | computed from on-chain events plus content weighting |
+| Agent prompts, outputs, action logs, PII | off-chain | private |
+| Reward eligibility, Sybil filtering | off-chain, derived | computed from on-chain events + snapshot |
 
 ---
 
-## Access Control
+## Immutability & fixes
 
-Both contracts use OpenZeppelin `Ownable` with the owner set in the constructor.
-
-| Function | Contract | Access | Effect |
-|---|---|---|---|
-| `mintPassport` | Passport | anyone | mint a passport to self |
-| `burnPassport` | Passport | holder only | burn own passport |
-| `checkIn` | Engagement | anyone | daily check-in |
-| `attestMap` / `attestWorkflow` | Engagement | passport owner | write a hash |
-| `setPoints` | Engagement | owner | change point values |
-| `setPassport` | Engagement | owner | repoint the passport reference |
-| `setCorToken` | Engagement | owner | store the future token address |
-
-What the owner key **cannot** do: mint, burn or move a passport, reduce an existing points balance, withdraw anything, pause anything, or upgrade logic. There is no pause mechanism and no proxy by deliberate choice.
-
-What the owner key **can** do: set arbitrary point values for future actions, and repoint `setPassport` at another address, which would change which contract the ownership check reads from. `setPassport` has no lock. Ownership transfer to a multisig after deploy is handled from the private repository, not enforced in code.
-
----
-
-## TGE-additive design
-
-`corToken` is a stored address, default `address(0)`, written only by `setCorToken` and read nowhere in the contract. It is inert storage today.
-
-It exists so that post-TGE fee, stake and reward modules can attach without redeploying `CortisEngagement` and without migrating the accumulated points ledger. The pre-TGE engagement history stays continuous across TGE, which matters because that history is the input to any later reward weighting.
-
-The pre-TGE loop never depends on the token. $COR is additive on top of the same actions, never a gate on them.
-
----
-
-## Chain split
-
-| Component | Chain | Rationale |
-|---|---|---|
-| `CortisPassport`, `CortisEngagement` | opBNB, 204 | near-zero gas makes a daily on-chain transaction per user viable at scale |
-| `$COR` token | BSC, 56 | liquidity and listing venue; deployed separately at TGE, not in this repository |
-
-The engagement contracts stay on opBNB permanently. The cross-chain entitlement pattern for post-TGE $COR reads is a separate design decision and is not implemented here.
-
----
-
-## Deployment order
-
-1. Deploy `CortisPassport(initialOwner)`.
-2. Deploy `CortisEngagement(initialOwner)`.
-3. Call `engagement.setPassport(passportAddress)`.
-4. Transfer ownership of both contracts to the multisig.
-
-Deployment wires the passport into the engagement contract via `setPassport`, then ownership is transferred to a multisig. Both steps are handled from the private repository and are outside this review.
-
-Until step 3 runs, attestation reverts with `PassportNotSet` while check-in works normally.
+Every contract is immutable and non-upgradeable. If the core is ever defective
+the answer is a new deployment plus an audited state import — never an in-place
+upgrade that could silently rewrite history. This is why the audited source is
+deployed fresh and promoted only after the audit, rather than patched over a
+staging address.

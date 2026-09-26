@@ -1,95 +1,76 @@
-# Cortis Contracts
+# Cortis AI
 
-On-chain engagement and soulbound agent identity for Cortis, built for opBNB Mainnet.
+A personal AI executive team with on-chain agent identity and engagement, built on **BNB Chain (opBNB)** and compatible with other EVM networks.
 
-Cortis is a personal AI operator. Each owner runs a small roster of specialised AI agents trained on their own private data. These contracts record an agent's identity and its completed work on-chain.
+Cortis gives every user a team of specialist AI executive agents trained on their own data. Each agent is minted as a soulbound **Agent Passport** on opBNB, and its owner's engagement (check-ins, profile mapping, workflows, deployments) is recorded on-chain by **CortisEngagement**. This repository is the official smart-contract source for both, deployed on opBNB Mainnet (Chain ID 204).
 
-## Status
-
-**Pre-audit. Built and tested, not deployed.** No contract in this repository is live on any public network. There are no addresses to verify yet.
+- App: https://app.cortisai.com
+- Website: https://cortisai.com
+- X: https://x.com/cortis_ai
 
 ## Technology Stack
 
-- **Blockchain:** opBNB Mainnet (engagement layer). $COR launches separately on BNB Smart Chain at TGE.
-- **Smart Contracts:** Solidity 0.8.24, optimizer enabled, 200 runs
-- **Libraries:** OpenZeppelin Contracts 5.x (`_update` hook model, not v4)
-- **Development:** Hardhat 2.22
-- **Frontend:** Vanilla JS + ethers.js v6 (in `../app`)
-- **Security:** `CortisEngagement` under security review by Hashlock — scope in `docs/AUDIT-SCOPE.md`
+- **Blockchain**: BNB Chain, opBNB Mainnet (engagement layer). The $COR token launches on BNB Smart Chain at TGE.
+- **Smart Contracts**: Solidity 0.8.28 (pragma `^0.8.27`), optimizer enabled, 400 runs
+- **Frontend**: React + Vite + viem (app.cortisai.com, separate repository)
+- **Development**: Foundry (`forge`), OpenZeppelin Contracts 5.x
 
 ## Supported Networks
 
-- opBNB Mainnet (Chain ID: 204) — `CortisEngagement` (+ `CortisPassport` dependency), pending deploy
-- BNB Smart Chain (Chain ID: 56) — $COR token at TGE, contract not in this repository
+- **opBNB Mainnet** (Chain ID: 204): AgentPassport + CortisEngagement, live
+- **BNB Smart Chain Mainnet** (Chain ID: 56): $COR token at TGE (not yet deployed)
 
 ## Contract Addresses
 
-| Network | Passport | Engagement | Token |
+| Network | Core Contract (CortisEngagement) | Identity (AgentPassport) | Token ($COR) |
 |---|---|---|---|
-| opBNB Mainnet (204) | TBD — pending deploy | TBD — pending deploy | — |
-| BNB Smart Chain (56) | — | — | TBD at TGE |
+| opBNB Mainnet (204) | [`0xF77C3f4c0b835B93d8d47D52F3a44f7Fe8d2269b`](https://opbnbscan.com/address/0xF77C3f4c0b835B93d8d47D52F3a44f7Fe8d2269b) | [`0x932E0E70763C7156c445c4f6F3f7926a4A3F4b4D`](https://opbnbscan.com/address/0x932E0E70763C7156c445c4f6F3f7926a4A3F4b4D) | n/a |
+| BNB Smart Chain (56) | n/a | n/a | TBD at TGE |
 
-## Contracts
-
-**`CortisPassport`** — soulbound ERC-721 agent identity. Minting commits an agent on-chain. One wallet may hold many passports, one per agent. Transfers revert; `approve` and `setApprovalForAll` revert. The holder may burn their own passport. 160 lines.
-
-**`CortisEngagement`** — daily check-in on a rolling 24h window with streak tracking on a 48h continuation gap, plus per-agent attestation of map and workflow hashes. Attestation requires the caller to own the referenced passport, which is what binds attested work to a specific agent rather than a wallet. 203 lines.
+Both opBNB contracts are source-verified on Sourcify (exact match, runtime and creation bytecode). Deployment details, roles and transaction hashes are in [`deployment-addresses.json`](deployment-addresses.json). Admin rights are held by a Gnosis Safe multisig; the deployer holds no roles.
 
 ## Features
 
-- **Gas-only pre-TGE** — no token, no fee, no stake, no `payable` function. The only user cost is opBNB gas.
-- **Soulbound agent identity** — non-transferable, enforced at the single OpenZeppelin v5 `_update` chokepoint so every transfer overload is covered by one guard.
-- **Per-agent attestation** — map and workflow hashes written against a passport the caller owns. Only hashes on-chain, never prompts, outputs or PII.
-- **Streak-compounding engagement** — check-in points scale with a maintained streak; nothing decays, nothing is subtracted.
-- **TGE-additive by design** — a reserved `corToken` address lets post-TGE fee and stake modules attach without redeploying the engagement contract or migrating the points ledger.
-- **No proxy, no upgradeability, no delegatecall** — both contracts are immutable once deployed.
-- **Multisig ownership after deploy** — a documented post-deploy step; the owner key cannot mint, move or burn a passport, cannot reduce a points balance, and cannot withdraw anything.
+- **Soulbound agent identity on opBNB**: each AI agent is a non-transferable ERC-721 (ERC-5192) Agent Passport, minted with an issuer-signed voucher. Up to 5 active agents per owner.
+- **On-chain engagement**: daily wallet and agent check-ins with an accelerating streak curve, plus `mapMe`, `generateWorkflow` and `deployAgent` activity events.
+- **Low-cost by design for opBNB**: gas-only pre-TGE. No token, fee or stake paths; the only user cost is opBNB gas.
+- **Security controls**: role-based access with a Safe-held admin and a separate guardian that can pause but not unpause. No one can move, mint for, or rewrite another user's history.
+- **Immutable contracts**: no proxy, no upgradeability, no delegatecall.
 
-## Documentation
+## Contracts
 
-| Document | Description |
-|---|---|
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | Contract interactions, state machines, on-chain vs off-chain split, access control |
-| [AUDIT SCOPE](docs/AUDIT-SCOPE.md) | Audit targets, security properties, intentional design decisions, known limitations |
+| Contract | File | Purpose |
+|---|---|---|
+| `CortisEngagement` | `src/CortisEngagement.sol` | Wallet + agent daily check-in, activity events |
+| `AgentPassport` | `src/AgentPassport.sol` | Soulbound ERC-721 (ERC-5192) agent identity |
+| `NullFeePolicy` | `src/policies/Policies.sol` | Zero-fee policy kept for TGE wiring parity (not deployed) |
+| `ICortis` | `src/interfaces/ICortis.sol` | Shared interfaces |
 
 ## Quick Start
 
 ```bash
+forge install foundry-rs/forge-std --no-git
 npm install
-npm test       # 21 passing
-npm run compile
+forge build
+forge test        # 28 passing
 ```
 
-Copy `.env.example` to `.env` before compiling against a network. `.env` is git-ignored.
+Deploying to opBNB (RPC configured in `foundry.toml` as `opbnb`):
 
-## Repository Structure
-
-```
-contracts/
-  CortisEngagement.sol      — check-in + per-agent attestation (audit scope)
-  CortisPassport.sol        — soulbound ERC-721 identity (out-of-scope dependency)
-docs/
-  ARCHITECTURE.md           — contract design and interactions
-  AUDIT-SCOPE.md            — audit scope and security properties
-test/
-  CortisEngagement.test.js
-  CortisPassport.test.js
-hardhat.config.js
-.env.example
+```bash
+cp .env.example .env   # fill in values, never commit a key
+forge create src/AgentPassport.sol:AgentPassport --rpc-url opbnb --private-key "$DEPLOYER_PRIVATE_KEY" ...
 ```
 
-## Tests
+## Documentation
 
-21 tests, all passing. Covers the 24h gate, the 48h streak reset and both boundaries, per-wallet isolation, both attestation paths and their non-owner reverts, the unset-passport revert, owner access control on every setter, multiple passports per wallet, all four soulbound revert paths, and holder-only burn with count decrement.
+- [Architecture](docs/ARCHITECTURE.md)
+- [Security scope](docs/AUDIT-SCOPE.md)
 
-## Verification
+## Security
 
-Contracts compile clean at Solidity 0.8.24 with the optimizer enabled (200 runs). Post-audit deployment and opBNBScan verification are handled from the private repository.
+Security review by Hashlock. The final report will be linked here once published. The $COR token is a separate BNB Smart Chain deployment at TGE and is not in this repository.
 
-## Audit
+## License
 
-The engagement contract (`contracts/CortisEngagement.sol`) is under security review by [Hashlock](https://hashlock.com). Review in progress.
-
-Scope is deliberately narrow: **only `CortisEngagement` is under review.** `CortisPassport` is included as an out-of-scope dependency so the reviewers can read the `ownerOf` interface the engagement contract calls into. See [docs/AUDIT-SCOPE.md](docs/AUDIT-SCOPE.md) for the full target list, the security properties being checked, intentional design decisions, and known limitations.
-
-The $COR token is a separate BNB Smart Chain deployment at TGE. It is not in this repository and not in scope. Nothing under review holds, mints, transfers or prices a token.
+MIT

@@ -1,18 +1,10 @@
 {
-  "name": "cortis-contracts",
+  "name": "@cortis/contracts",
+  "private": true,
   "version": "1.0.0",
-  "description": "Cortis on-chain engagement layer (opBNB) — soulbound passport + engagement contracts",
+  "description": "Cortis on-chain engagement and soulbound agent identity (opBNB). Foundry project.",
   "license": "MIT",
-  "scripts": {
-    "compile": "hardhat compile",
-    "test": "hardhat test"
-  },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "hardhat": "^2.22.10"
-  },
-  "dependencies": {
-    "@openzeppelin/contracts": "^5.0.2",
-    "dotenv": "^16.4.5"
+    "@openzeppelin/contracts": "^5.6.1"
   }
 }
